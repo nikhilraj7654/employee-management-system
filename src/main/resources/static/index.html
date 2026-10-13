@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee Management System</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --primary:#2563eb; --danger:#dc2626; --border:#e5e7eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f172a; --card:#1e293b; --text:#e5e7eb; --muted:#9ca3af; --primary:#3b82f6; --danger:#ef4444; --border:#334155; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--primary); color:#fff; padding:18px 24px; }
+  header h1 { margin:0; font-size:1.3rem; }
+  main { max-width:1000px; margin:24px auto; padding:0 16px; display:grid; gap:20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; }
+  h2 { margin-top:0; font-size:1.05rem; }
+  form { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+  label { display:flex; flex-direction:column; font-size:.8rem; color:var(--muted); gap:4px; }
+  input { padding:9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:.95rem; }
+  .actions { grid-column:1/-1; display:flex; gap:10px; }
+  button { padding:9px 16px; border:0; border-radius:6px; cursor:pointer; background:var(--primary); color:#fff; font-size:.9rem; }
+  button.secondary { background:var(--muted); }
+  button.danger { background:var(--danger); }
+  button.small { padding:5px 10px; font-size:.8rem; }
+  .toolbar { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .toolbar input { flex:1; min-width:160px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; }
+  #msg { padding:10px 14px; border-radius:6px; display:none; font-size:.9rem; }
+  #msg.ok { display:block; background:#dcfce7; color:#166534; }
+  #msg.err { display:block; background:#fee2e2; color:#991b1b; }
+</style>
+</head>
+<body>
+<header><h1>Employee Management System</h1></header>
+<main>
+  <div id="msg"></div>
+
+  <section class="card">
+    <h2 id="formTitle">Add Employee</h2>
+    <form id="empForm">
+      <input type="hidden" id="id">
+      <label>First Name<input id="firstName" required></label>
+      <label>Last Name<input id="lastName" required></label>
+      <label>Email<input id="email" type="email" required></label>
+      <label>Department<input id="department" required></label>
+      <label>Job Title<input id="jobTitle" required></label>
+      <label>Salary<input id="salary" type="number" min="1" step="any" required></label>
+      <div class="actions">
+        <button type="submit" id="saveBtn">Save</button>
+        <button type="button" class="secondary" id="cancelBtn">Clear</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Employees</h2>
+    <div class="toolbar">
+      <input id="filter" placeholder="Filter by department (e.g. Engineering)">
+      <button id="filterBtn">Filter</button>
+      <button class="secondary" id="resetBtn">Reset</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Department</th><th>Job Title</th><th>Salary</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const API = '/api/employees';
+const $ = id => document.getElementById(id);
+const fields = ['firstName','lastName','email','department','jobTitle','salary'];
+
+function show(text, ok = true) {
+  const m = $('msg');
+  m.textContent = text;
+  m.className = ok ? 'ok' : 'err';
+  setTimeout(() => m.className = '', 4000);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function load(department) {
+  const url = department ? `${API}?department=${encodeURIComponent(department)}` : API;
+  const res = await fetch(url);
+  const data = await res.json();
+  $('rows').innerHTML = data.map(e => `
+    <tr>
+      <td>${e.id}</td>
+      <td>${esc(e.firstName)} ${esc(e.lastName)}</td>
+      <td>${esc(e.email)}</td>
+      <td>${esc(e.department)}</td>
+      <td>${esc(e.jobTitle)}</td>
+      <td>${Number(e.salary).toLocaleString()}</td>
+      <td>
+        <button class="small" onclick="edit(${e.id})">Edit</button>
+        <button class="small danger" onclick="remove(${e.id})">Delete</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7">No employees found</td></tr>';
+}
+
+function clearForm() {
+  $('empForm').reset();
+  $('id').value = '';
+  $('formTitle').textContent = 'Add Employee';
+}
+
+async function edit(id) {
+  const res = await fetch(`${API}/${id}`);
+  const e = await res.json();
+  $('id').value = e.id;
+  fields.forEach(f => $(f).value = e[f]);
+  $('formTitle').textContent = 'Edit Employee #' + id;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function remove(id) {
+  if (!confirm('Delete this employee?')) return;
+  const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+  if (res.ok) { show('Employee deleted'); load($('filter').value.trim()); }
+  else show('Delete failed', false);
+}
+
+$('empForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const body = {};
+  fields.forEach(f => body[f] = $(f).value);
+  body.salary = Number(body.salary);
+  const id = $('id').value;
+  const res = await fetch(id ? `${API}/${id}` : API, {
+    method: id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (res.ok) {
+    show(id ? 'Employee updated' : 'Employee added');
+    clearForm();
+    load($('filter').value.trim());
+  } else {
+    const detail = data.errors ? Object.values(data.errors).join(', ') : data.message;
+    show(detail, false);
+  }
+});
+
+$('cancelBtn').onclick = clearForm;
+$('filterBtn').onclick = () => load($('filter').value.trim());
+$('resetBtn').onclick = () => { $('filter').value = ''; load(); };
+load();
+</script>
+</body>
+</html>
